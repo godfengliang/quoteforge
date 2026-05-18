@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuoteForge — Freelancer Quote Calculator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          50: '#f0f9ff', 100: '#e0f2fe', 200: '#bae6fd', 300: '#7dd3fc',
+          400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1',
+          800: '#075985', 900: '#0c4a6e', 950: '#082f49'
+        }
+      }
+    }
+  }
+}
+</script>
+<style>
+  body { background: #0f172a; color: #e2e8f0; }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: #1e293b; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #475569; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; background: #334155; outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #0ea5e9; cursor: pointer; border: 2px solid #0f172a; }
+  input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #0ea5e9; cursor: pointer; border: 2px solid #0f172a; }
+  .item-row:hover { background: rgba(14,165,233,0.05); }
+  .toast { animation: slideIn 0.3s ease-out, fadeOut 0.3s ease-in 2.7s; }
+  @keyframes slideIn { from { transform: translateY(-20px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+  @keyframes fadeOut { from { opacity:1; } to { opacity:0; } }
+  .history-item:hover { background: #1e293b; }
+  @media print { .no-print { display: none !important; } }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- Toast container -->
+<div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
+
+<!-- Top Bar -->
+<header class="bg-slate-900 border-b border-slate-700/50 sticky top-0 z-40 no-print">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-gradient-to-br from-sky-400 to-blue-600 rounded-lg flex items-center justify-center font-bold text-white text-lg shadow-lg shadow-sky-500/20">Q</div>
+      <div>
+        <h1 class="text-lg font-bold text-white leading-tight">QuoteForge</h1>
+        <p class="text-[11px] text-slate-400 leading-tight">Freelancer Quote Calculator</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 sm:gap-3">
+      <!-- Currency Selector -->
+      <select id="currency" onchange="App.update()" class="bg-slate-800 border border-slate-600 text-sm rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-sky-500">
+        <option value="USD">USD $</option>
+        <option value="EUR">EUR &euro;</option>
+        <option value="GBP">GBP &pound;</option>
+        <option value="CNY">CNY &yen;</option>
+        <option value="JPY">JPY &yen;</option>
+      </select>
+      <button onclick="App.newQuote()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-sm rounded-lg transition-colors flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        <span class="hidden sm:inline">New Quote</span>
+      </button>
+      <button onclick="App.saveQuote()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-sm rounded-lg transition-colors flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+        <span class="hidden sm:inline">Save</span>
+      </button>
+      <button onclick="App.showHistory()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-sm rounded-lg transition-colors flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span class="hidden sm:inline">History</span>
+      </button>
+      <button onclick="App.downloadPDF()" class="px-3 py-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-sm rounded-lg transition-all flex items-center gap-1.5 shadow-lg shadow-sky-500/20">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        <span class="hidden sm:inline">Download PDF</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- History Modal -->
+<div id="historyModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-slate-800 rounded-xl border border-slate-600 w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700">
+      <h2 class="text-lg font-semibold text-white">Quote History</h2>
+      <button onclick="App.closeHistory()" class="text-slate-400 hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="historyList" class="overflow-y-auto flex-1 p-4 space-y-2"></div>
+  </div>
+</div>
+
+<!-- Main Content -->
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+  <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+    <!-- Left Column: Client Info -->
+    <div class="lg:col-span-2 space-y-5">
+      <!-- Quote Meta -->
+      <section class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5">
+        <h3 class="text-sm font-semibold text-sky-400 uppercase tracking-wider mb-4">Quote Details</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Quote Number</label>
+            <input type="text" id="quoteNumber" readonly class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none cursor-default" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Date</label>
+            <input type="date" id="quoteDate" onchange="App.update()" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Valid Until</label>
+            <input type="date" id="validUntil" onchange="App.update()" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Your Company -->
+      <section class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5">
+        <h3 class="text-sm font-semibold text-sky-400 uppercase tracking-wider mb-4">Your Company</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Company Name</label>
+            <input type="text" id="companyName" placeholder="Your Company" oninput="App.update()" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Email</label>
+            <input type="email" id="companyEmail" placeholder="you@company.com" oninput="App.update()" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Client Info -->
+      <section class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5">
+        <h3 class="text-sm font-semibold text-sky-400 uppercase tracking-wider mb-4">Client Information</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Client Name</label>
+            <input type="text" id="clientName" placeholder="Client or Company Name" oninput="App.update()" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Client Email</label>
+            <input type="email" id="clientEmail" placeholder="client@email.com" oninput="App.update()" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Project Name</label>
+            <input type="text" id="projectName" placeholder="Project Title" oninput="App.update()" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Terms -->
+      <section class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5">
+        <h3 class="text-sm font-semibold text-sky-400 uppercase tracking-wider mb-4">Terms &amp; Notes</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Payment Terms</label>
+            <select id="paymentTerms" onchange="App.update()" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500">
+              <option value="Due on Receipt">Due on Receipt</option>
+              <option value="Net 15">Net 15</option>
+              <option value="Net 30" selected>Net 30</option>
+              <option value="Net 60">Net 60</option>
+              <option value="50% upfront, 50% on completion">50% upfront, 50% on completion</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Notes</label>
+            <textarea id="notes" rows="3" placeholder="Additional terms, assumptions, or notes..." oninput="App.update()" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 resize-none"></textarea>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Right Column: Items + Calculator + Summary -->
+    <div class="lg:col-span-3 space-y-5">
+
+      <!-- Line Items -->
+      <section class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-semibold text-sky-400 uppercase tracking-wider">Line Items</h3>
+          <button onclick="App.addItem()" class="text-xs px-3 py-1.5 bg-sky-500/20 text-sky-400 rounded-lg hover:bg-sky-500/30 transition-colors flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Add Item
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-xs text-slate-400 border-b border-slate-700/50">
+                <th class="text-left pb-2 pl-1 w-8">#</th>
+                <th class="text-left pb-2">Description</th>
+                <th class="text-right pb-2 w-16">Qty</th>
+                <th class="text-right pb-2 w-28">Unit Price</th>
+                <th class="text-right pb-2 w-24">Total</th>
+                <th class="pb-2 w-8"></th>
+              </tr>
+            </thead>
+            <tbody id="itemsBody"></tbody>
+          </table>
+        </div>
+        <div id="noItems" class="text-center py-8 text-slate-500 text-sm hidden">
+          No items yet. Click "Add Item" to begin.
+        </div>
+      </section>
+
+      <!-- Rate Calculator -->
+      <section class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-semibold text-sky-400 uppercase tracking-wider">Rate Calculator</h3>
+          <button onclick="App.applyRateToItems()" class="text-xs px-3 py-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors">
+            Apply as Line Item
+          </button>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Hourly Rate</label>
+            <input type="number" id="hourlyRate" value="0" min="0" step="1" oninput="App.calcRate()" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Est. Hours</label>
+            <input type="number" id="estHours" value="0" min="0" step="0.5" oninput="App.calcRate()" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Complexity</label>
+            <div class="flex items-center gap-2">
+              <input type="range" id="complexity" min="1" max="3" step="0.1" value="1" oninput="App.calcRate()" class="flex-1" />
+              <span id="complexityVal" class="text-xs text-slate-300 w-7 text-right font-mono">1.0x</span>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Risk Buffer</label>
+            <div class="flex items-center gap-2">
+              <input type="range" id="riskBuffer" min="0" max="30" step="1" value="0" oninput="App.calcRate()" class="flex-1" />
+              <span id="riskVal" class="text-xs text-slate-300 w-7 text-right font-mono">0%</span>
+            </div>
+          </div>
+        </div>
+        <div class="bg-slate-900/40 rounded-lg p-3 flex items-center justify-between border border-slate-700/30">
+          <span class="text-xs text-slate-400">Calculated Price</span>
+          <span id="calculatedPrice" class="text-lg font-bold text-sky-400 font-mono">0.00</span>
+        </div>
+      </section>
+
+      <!-- Summary -->
+      <section class="bg-gradient-to-br from-slate-800/80 to-slate-800/50 rounded-xl border border-sky-500/20 p-5">
+        <h3 class="text-sm font-semibold text-sky-400 uppercase tracking-wider mb-4">Summary</h3>
+        <div class="space-y-2.5">
+          <div class="flex justify-between text-sm">
+            <span class="text-slate-400">Subtotal</span>
+            <span id="subtotal" class="text-slate-200 font-mono">0.00</span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2 flex-1">
+              <span class="text-sm text-slate-400">Tax</span>
+              <input type="number" id="taxPercent" value="0" min="0" max="100" step="0.5" oninput="App.update()" class="w-16 bg-slate-900/50 border border-slate-600/50 rounded px-2 py-0.5 text-sm text-slate-200 text-center focus:outline-none focus:border-sky-500" />
+              <span class="text-sm text-slate-500">%</span>
+            </div>
+            <span id="taxAmount" class="text-sm text-slate-300 font-mono">0.00</span>
+          </div>
+          <div class="border-t border-slate-700/50 pt-2.5 flex justify-between items-center">
+            <span class="text-base font-semibold text-white">Grand Total</span>
+            <span id="grandTotal" class="text-2xl font-bold text-sky-400 font-mono">0.00</span>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<footer class="text-center py-4 text-xs text-slate-600 no-print">QuoteForge &mdash; Professional quotes in seconds</footer>
+
+<script>
+const App = (function() {
+  // ── Currency definitions ──
+  const CURRENCIES = {
+    USD: { symbol: '$', decimals: 2 },
+    EUR: { symbol: '€', decimals: 2 },
+    GBP: { symbol: '£', decimals: 2 },
+    CNY: { symbol: '¥', decimals: 2 },
+    JPY: { symbol: '¥', decimals: 0 }
+  };
+
+  // ── State ──
+  let items = [];
+  let nextItemId = 1;
+
+  // ── Helpers ──
+  function val(id) { return document.getElementById(id).value; }
+  function num(id) { return parseFloat(document.getElementById(id).value) || 0; }
+  function cur() { return document.getElementById('currency').value; }
+
+  function money(amount) {
+    const c = CURRENCIES[cur()];
+    const formatted = amount.toFixed(c.decimals);
+    return c.symbol + formatted;
+  }
+
+  function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function toast(msg, type) {
+    const el = document.createElement('div');
+    const colors = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-red-600' : 'bg-sky-600';
+    el.className = 'toast px-4 py-2 rounded-lg text-white text-sm font-medium shadow-lg ' + colors;
+    el.textContent = msg;
+    document.getElementById('toastContainer').appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+
+  function nextQuoteNumber() {
+    const saved = JSON.parse(localStorage.getItem('quoteforge_saved') || '[]');
+    let max = 0;
+    saved.forEach(q => {
+      const m = (q.quoteNumber || '').match(/QT-(\d+)/);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    });
+    return 'QT-' + String(max + 1).padStart(4, '0');
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  // ── Items ──
+  function addItem(desc, qty, price) {
+    const item = { id: nextItemId++, description: desc || '', qty: qty || 1, price: price || 0 };
+    items.push(item);
+    renderItems();
+    update();
+  }
+
+  function removeItem(id) {
+    items = items.filter(i => i.id !== id);
+    renderItems();
+    update();
+  }
+
+  function updateItemField(id, field, value) {
+    const item = items.find(i => i.id === id);
+    if (item) {
+      if (field === 'description') item.description = value;
+      else if (field === 'qty') item.qty = Math.max(0, parseFloat(value) || 0);
+      else if (field === 'price') item.price = Math.max(0, parseFloat(value) || 0);
+    }
+    // Update only the total cell to preserve focus
+    const totalCell = document.getElementById('total-' + id);
+    if (totalCell) {
+      const c = CURRENCIES[cur()];
+      totalCell.textContent = money(item.qty * item.price);
+    }
+    update();
+  }
+
+  function renderItems() {
+    const tbody = document.getElementById('itemsBody');
+    const noItems = document.getElementById('noItems');
+    if (items.length === 0) {
+      tbody.innerHTML = '';
+      noItems.classList.remove('hidden');
+      return;
+    }
+    noItems.classList.add('hidden');
+    tbody.innerHTML = items.map((item, idx) => {
+      const total = item.qty * item.price;
+      return '<tr class="item-row border-b border-slate-700/30">' +
+        '<td class="py-2 pl-1 text-slate-500 text-xs">' + (idx + 1) + '</td>' +
+        '<td class="py-2 pr-2"><input type="text" value="' + esc(item.description) + '" oninput="App.updateItemField(' + item.id + ',\'description\',this.value)" class="w-full bg-transparent border-0 text-slate-200 text-sm focus:outline-none placeholder-slate-600" placeholder="Item description" /></td>' +
+        '<td class="py-2"><input type="number" value="' + item.qty + '" min="0" step="1" oninput="App.updateItemField(' + item.id + ',\'qty\',this.value)" class="w-full bg-transparent border-0 text-slate-200 text-sm text-right focus:outline-none w-16" /></td>' +
+        '<td class="py-2"><input type="number" value="' + item.price + '" min="0" step="0.01" oninput="App.updateItemField(' + item.id + ',\'price\',this.value)" class="w-full bg-transparent border-0 text-slate-200 text-sm text-right focus:outline-none w-28" /></td>' +
+        '<td id="total-' + item.id + '" class="py-2 text-right text-slate-300 font-mono text-sm">' + money(total) + '</td>' +
+        '<td class="py-2 text-center"><button onclick="App.removeItem(' + item.id + ')" class="text-slate-600 hover:text-red-400 transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  // ── Calculations ──
+  function calcRate() {
+    const rate = num('hourlyRate');
+    const hours = num('estHours');
+    const complexity = parseFloat(document.getElementById('complexity').value) || 1;
+    const risk = parseFloat(document.getElementById('riskBuffer').value) || 0;
+
+    document.getElementById('complexityVal').textContent = complexity.toFixed(1) + 'x';
+    document.getElementById('riskVal').textContent = Math.round(risk) + '%';
+
+    const base = rate * hours;
+    const withComplexity = base * complexity;
+    const withRisk = withComplexity * (1 + risk / 100);
+    document.getElementById('calculatedPrice').textContent = money(withRisk);
+  }
+
+  function getSubtotal() {
+    return items.reduce((sum, i) => sum + (i.qty * i.price), 0);
+  }
+
+  function update() {
+    const subtotal = getSubtotal();
+    const taxPct = num('taxPercent');
+    const taxAmt = subtotal * (taxPct / 100);
+    const total = subtotal + taxAmt;
+
+    document.getElementById('subtotal').textContent = money(subtotal);
+    document.getElementById('taxAmount').textContent = money(taxAmt);
+    document.getElementById('grandTotal').textContent = money(total);
+
+    autoDraft();
+  }
+
+  // ── Persistence ──
+  function getState() {
+    return {
+      quoteNumber: val('quoteNumber'),
+      quoteDate: val('quoteDate'),
+      validUntil: val('validUntil'),
+      companyName: val('companyName'),
+      companyEmail: val('companyEmail'),
+      clientName: val('clientName'),
+      clientEmail: val('clientEmail'),
+      projectName: val('projectName'),
+      paymentTerms: val('paymentTerms'),
+      notes: val('notes'),
+      currency: cur(),
+      taxPercent: num('taxPercent'),
+      items: items.map(i => ({ description: i.description, qty: i.qty, price: i.price })),
+      hourlyRate: num('hourlyRate'),
+      estHours: num('estHours'),
+      complexity: parseFloat(document.getElementById('complexity').value) || 1,
+      riskBuffer: parseFloat(document.getElementById('riskBuffer').value) || 0,
+      savedAt: new Date().toISOString()
+    };
+  }
+
+  function loadState(data) {
+    document.getElementById('quoteNumber').value = data.quoteNumber || '';
+    document.getElementById('quoteDate').value = data.quoteDate || '';
+    document.getElementById('validUntil').value = data.validUntil || '';
+    document.getElementById('companyName').value = data.companyName || '';
+    document.getElementById('companyEmail').value = data.companyEmail || '';
+    document.getElementById('clientName').value = data.clientName || '';
+    document.getElementById('clientEmail').value = data.clientEmail || '';
+    document.getElementById('projectName').value = data.projectName || '';
+    document.getElementById('paymentTerms').value = data.paymentTerms || 'Net 30';
+    document.getElementById('notes').value = data.notes || '';
+    document.getElementById('taxPercent').value = data.taxPercent || 0;
+    if (data.currency) document.getElementById('currency').value = data.currency;
+
+    items = (data.items || []).map(i => ({ id: nextItemId++, description: i.description, qty: i.qty, price: i.price }));
+    renderItems();
+
+    if (data.hourlyRate !== undefined) document.getElementById('hourlyRate').value = data.hourlyRate;
+    if (data.estHours !== undefined) document.getElementById('estHours').value = data.estHours;
+    if (data.complexity !== undefined) document.getElementById('complexity').value = data.complexity;
+    if (data.riskBuffer !== undefined) document.getElementById('riskBuffer').value = data.riskBuffer;
+
+    calcRate();
+    update();
+  }
+
+  let draftTimer;
+  function autoDraft() {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => {
+      localStorage.setItem('quoteforge_draft', JSON.stringify(getState()));
+    }, 500);
+  }
+
+  function loadDraft() {
+    const draft = localStorage.getItem('quoteforge_draft');
+    if (draft) {
+      try { loadState(JSON.parse(draft)); } catch(e) {}
+    }
+  }
+
+  // ── Save / Load ──
+  function saveQuote() {
+    const state = getState();
+    if (!state.clientName && !state.projectName) {
+      toast('Please fill in client name or project name', 'error');
+      return;
+    }
+    const saved = JSON.parse(localStorage.getItem('quoteforge_saved') || '[]');
+    // Check if overwriting existing
+    const idx = saved.findIndex(q => q.quoteNumber === state.quoteNumber);
+    if (idx >= 0) {
+      saved[idx] = state;
+    } else {
+      saved.unshift(state);
+    }
+    // Cap at 50
+    if (saved.length > 50) saved.length = 50;
+    localStorage.setItem('quoteforge_saved', JSON.stringify(saved));
+    toast('Quote ' + state.quoteNumber + ' saved!', 'success');
+  }
+
+  function loadQuote(quoteNumber) {
+    const saved = JSON.parse(localStorage.getItem('quoteforge_saved') || '[]');
+    const q = saved.find(q => q.quoteNumber === quoteNumber);
+    if (q) {
+      loadState(q);
+      closeHistory();
+      toast('Quote loaded', 'success');
+    }
+  }
+
+  function deleteQuote(quoteNumber) {
+    let saved = JSON.parse(localStorage.getItem('quoteforge_saved') || '[]');
+    saved = saved.filter(q => q.quoteNumber !== quoteNumber);
+    localStorage.setItem('quoteforge_saved', JSON.stringify(saved));
+    showHistory();
+    toast('Quote deleted', 'success');
+  }
+
+  // ── History ──
+  function showHistory() {
+    const saved = JSON.parse(localStorage.getItem('quoteforge_saved') || '[]');
+    const list = document.getElementById('historyList');
+    if (saved.length === 0) {
+      list.innerHTML = '<div class="text-center text-slate-500 py-8">No saved quotes yet</div>';
+    } else {
+      list.innerHTML = saved.map(q => {
+        const c = CURRENCIES[q.currency || 'USD'];
+        const sub = (q.items || []).reduce((s, i) => s + (i.qty * i.price), 0);
+        const tax = sub * ((q.taxPercent || 0) / 100);
+        const total = sub + tax;
+        return '<div class="history-item rounded-lg p-3 border border-slate-700/50 flex items-center gap-4 cursor-pointer transition-colors" onclick="App.loadQuote(\'' + esc(q.quoteNumber) + '\')">' +
+          '<div class="flex-1 min-w-0">' +
+            '<div class="text-sm font-medium text-white truncate">' + esc(q.quoteNumber) + ' &mdash; ' + esc(q.clientName || 'No client') + '</div>' +
+            '<div class="text-xs text-slate-400 truncate">' + esc(q.projectName || 'Untitled project') + ' &middot; ' + (q.savedAt ? formatDate(q.savedAt.slice(0,10)) : '') + '</div>' +
+          '</div>' +
+          '<div class="text-right flex-shrink-0">' +
+            '<div class="text-sm font-semibold text-sky-400 font-mono">' + c.symbol + total.toFixed(c.decimals) + '</div>' +
+          '</div>' +
+          '<button onclick="event.stopPropagation();App.deleteQuote(\'' + esc(q.quoteNumber) + '\')" class="text-slate-500 hover:text-red-400 transition-colors flex-shrink-0 ml-1" title="Delete">' +
+            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>' +
+          '</button>' +
+        '</div>';
+      }).join('');
+    }
+    document.getElementById('historyModal').classList.remove('hidden');
+  }
+
+  function closeHistory() {
+    document.getElementById('historyModal').classList.add('hidden');
+  }
+
+  // ── New Quote ──
+  function newQuote() {
+    document.getElementById('quoteNumber').value = nextQuoteNumber();
+    const today = new Date();
+    document.getElementById('quoteDate').value = today.toISOString().slice(0, 10);
+    const valid = new Date(today);
+    valid.setDate(valid.getDate() + 30);
+    document.getElementById('validUntil').value = valid.toISOString().slice(0, 10);
+    document.getElementById('clientName').value = '';
+    document.getElementById('clientEmail').value = '';
+    document.getElementById('projectName').value = '';
+    document.getElementById('notes').value = '';
+    document.getElementById('paymentTerms').value = 'Net 30';
+    document.getElementById('taxPercent').value = 0;
+    items = [];
+    nextItemId = 1;
+    renderItems();
+    update();
+  }
+
+  // ── Rate → Item ──
+  function applyRateToItems() {
+    const rate = num('hourlyRate');
+    const hours = num('estHours');
+    if (rate <= 0 || hours <= 0) {
+      toast('Set hourly rate and estimated hours first', 'error');
+      return;
+    }
+    const complexity = parseFloat(document.getElementById('complexity').value) || 1;
+    const risk = parseFloat(document.getElementById('riskBuffer').value) || 0;
+    const total = rate * hours * complexity * (1 + risk / 100);
+
+    const desc = 'Professional services (' + hours + 'h @ ' + money(rate) + '/hr';
+    const parts = [];
+    if (complexity > 1) parts.push('complexity ' + complexity.toFixed(1) + 'x');
+    if (risk > 0) parts.push('risk buffer ' + Math.round(risk) + '%');
+    const fullDesc = desc + (parts.length ? ', ' + parts.join(', ') : '') + ')';
+
+    addItem(fullDesc, 1, total);
+    toast('Rate calculation added as line item', 'success');
+  }
+
+  // ── PDF Generation ──
+  function downloadPDF() {
+    const s = getState();
+    if (items.length === 0) {
+      toast('Add at least one line item', 'error');
+      return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageW = 210;
+    const margin = 20;
+    const contentW = pageW - margin * 2;
+    let y = 20;
+
+    // ── Header bar ──
+    doc.setFillColor(14, 165, 233);
+    doc.rect(0, 0, pageW, 40, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.text('QUOTE', margin, 18);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(s.quoteNumber, margin, 26);
+    doc.setFontSize(9);
+    doc.text('Date: ' + formatDate(s.quoteDate), margin, 33);
+
+    // Right side of header
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('QuoteForge', pageW - margin, 18, { align: 'right' });
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    if (s.companyEmail) doc.text(s.companyEmail, pageW - margin, 24, { align: 'right' });
+
+    y = 50;
+
+    // ── Client + Project Info ──
+    doc.setTextColor(100, 116, 139);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PREPARED FOR', margin, y);
+    y += 5;
+    doc.setTextColor(30, 41, 59);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(s.clientName || 'Client', margin, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    if (s.clientEmail) { doc.text(s.clientEmail, margin, y); y += 4; }
+
+    // Right side: project info
+    y = 50;
+    const rightX = pageW / 2 + 10;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 116, 139);
+    doc.text('PROJECT', rightX, y);
+    y += 5;
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text(s.projectName || 'Untitled', rightX, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Valid Until: ' + formatDate(s.validUntil), rightX, y);
+    y += 4;
+    if (s.companyName) doc.text('From: ' + s.companyName, rightX, y);
+
+    y += 12;
+
+    // ── Items Table ──
+    const colDesc = 80;
+    const colQty = 15;
+    const colPrice = 30;
+    const colTotal = contentW - colDesc - colQty - colPrice;
+
+    // Table header
+    doc.setFillColor(241, 245, 249);
+    doc.rect(margin, y, contentW, 8, 'F');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 116, 139);
+    const headerY = y + 5.5;
+    doc.text('Description', margin + 2, headerY);
+    doc.text('Qty', margin + colDesc, headerY, { align: 'center' });
+    doc.text('Unit Price', margin + colDesc + colQty + colPrice, headerY, { align: 'right' });
+    doc.text('Total', margin + contentW, headerY, { align: 'right' });
+    y += 8;
+
+    // Table rows
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(9);
+    const c = CURRENCIES[s.currency || 'USD'];
+
+    s.items.forEach((item, idx) => {
+      const rowTotal = item.qty * item.price;
+
+      // Alternate row bg
+      if (idx % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(margin, y, contentW, 8, 'F');
+      }
+
+      const rowY = y + 5.5;
+
+      // Description (truncated if too long)
+      const descText = item.description || 'Item';
+      doc.text(descText.substring(0, 50), margin + 2, rowY);
+      doc.text(String(item.qty), margin + colDesc, rowY, { align: 'center' });
+      doc.text(c.symbol + item.price.toFixed(c.decimals), margin + colDesc + colQty + colPrice, rowY, { align: 'right' });
+      doc.setFont('helvetica', 'bold');
+      doc.text(c.symbol + rowTotal.toFixed(c.decimals), margin + contentW, rowY, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+
+      y += 8;
+
+      // Page break check
+      if (y > 260) {
+        doc.addPage();
+        y = 20;
+      }
+    });
+
+    // Bottom line
+    doc.setDrawColor(226, 232, 240);
+    doc.line(margin, y, margin + contentW, y);
+    y += 8;
+
+    // ── Totals ──
+    const subtotal = getSubtotal();
+    const taxPct = s.taxPercent || 0;
+    const taxAmt = subtotal * (taxPct / 100);
+    const grandTotal = subtotal + taxAmt;
+
+    const labelX = margin + contentW - 50;
+    const valueX = margin + contentW;
+
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Subtotal:', labelX, y, { align: 'right' });
+    doc.setTextColor(30, 41, 59);
+    doc.text(c.symbol + subtotal.toFixed(c.decimals), valueX, y, { align: 'right' });
+    y += 6;
+
+    if (taxPct > 0) {
+      doc.setTextColor(100, 116, 139);
+      doc.text('Tax (' + taxPct + '%):', labelX, y, { align: 'right' });
+      doc.setTextColor(30, 41, 59);
+      doc.text(c.symbol + taxAmt.toFixed(c.decimals), valueX, y, { align: 'right' });
+      y += 6;
+    }
+
+    // Grand total with bg
+    doc.setFillColor(14, 165, 233);
+    doc.roundedRect(labelX - 4, y - 4, valueX - labelX + 4, 10, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Total:', labelX, y + 2.5, { align: 'right' });
+    doc.text(c.symbol + grandTotal.toFixed(c.decimals), valueX, y + 2.5, { align: 'right' });
+    y += 16;
+
+    // ── Terms & Notes ──
+    if (y > 230) { doc.addPage(); y = 20; }
+
+    doc.setTextColor(100, 116, 139);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TERMS', margin, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text('Payment: ' + (s.paymentTerms || 'Net 30'), margin, y);
+    y += 6;
+
+    if (s.notes) {
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('NOTES', margin, y);
+      y += 5;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(30, 41, 59);
+      const lines = doc.splitTextToSize(s.notes, contentW);
+      doc.text(lines, margin, y);
+      y += lines.length * 5;
+    }
+
+    // Footer
+    const footerY = 285;
+    doc.setDrawColor(226, 232, 240);
+    doc.line(margin, footerY - 3, margin + contentW, footerY - 3);
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Generated by QuoteForge', margin, footerY);
+    doc.text(s.quoteNumber, margin + contentW, footerY, { align: 'right' });
+
+    doc.save(s.quoteNumber + '.pdf');
+    toast('PDF downloaded!', 'success');
+  }
+
+  // ── Init ──
+  function init() {
+    // Load draft or create new
+    const draft = localStorage.getItem('quoteforge_draft');
+    if (draft) {
+      try {
+        loadState(JSON.parse(draft));
+      } catch(e) {
+        newQuote();
+      }
+    } else {
+      newQuote();
+    }
+
+    // Close history on backdrop click
+    document.getElementById('historyModal').addEventListener('click', function(e) {
+      if (e.target === this) closeHistory();
+    });
+  }
+
+  // Boot
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  // Public API
+  return {
+    update: update,
+    calcRate: calcRate,
+    addItem: addItem,
+    removeItem: removeItem,
+    updateItemField: updateItemField,
+    newQuote: newQuote,
+    saveQuote: saveQuote,
+    loadQuote: loadQuote,
+    deleteQuote: deleteQuote,
+    showHistory: showHistory,
+    closeHistory: closeHistory,
+    downloadPDF: downloadPDF,
+    applyRateToItems: applyRateToItems
+  };
+})();
+</script>
+</body>
+</html>
